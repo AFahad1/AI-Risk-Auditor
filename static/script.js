@@ -249,7 +249,7 @@ function addBotMessage(content, isHtml = false) {
   const div  = document.createElement("div");
   div.className = "message bot-message";
   div.innerHTML = `
-    <div class="avatar">🤖</div>
+    <div class="avatar"><span class="bot-dot"></span></div>
     <div class="bubble">${isHtml ? content : escapeHtml(content)}</div>`;
   msgs.appendChild(div);
   msgs.scrollTop = msgs.scrollHeight;
@@ -271,7 +271,7 @@ function addThinking() {
   div.id        = id;
   div.className = "message bot-message thinking";
   div.innerHTML = `
-    <div class="avatar">🤖</div>
+    <div class="avatar"><span class="bot-dot"></span></div>
     <div class="bubble"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>`;
   msgs.appendChild(div);
   msgs.scrollTop = msgs.scrollHeight;
@@ -322,7 +322,7 @@ function addAssessmentCard(message, data, index) {
   const msgs = document.getElementById("messages");
   const div  = document.createElement("div");
   div.className = "message bot-message";
-  div.innerHTML = `<div class="avatar">🤖</div><div class="bubble assess-bubble">${html}</div>`;
+  div.innerHTML = `<div class="avatar"><span class="bot-dot"></span></div><div class="bubble assess-bubble">${html}</div>`;
   msgs.appendChild(div);
   msgs.scrollTop = msgs.scrollHeight;
 }

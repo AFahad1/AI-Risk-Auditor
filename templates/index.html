@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Risk Assessment Tool</title>
+  <title>Risk Assessment</title>
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
@@ -12,9 +12,8 @@
   <div id="setup-screen">
     <div class="setup-card">
       <div class="setup-logo">
-        <span class="logo-icon">🛡️</span>
-        <h1>Risk Assessment Tool</h1>
-        <p class="setup-subtitle">IT Compliance · SOC 2</p>
+        <span class="logo-icon">🔍</span>
+        <h1>Risk Assessment</h1>
       </div>
 
       <div class="form-group">
@@ -46,23 +45,29 @@
 
       <div id="setup-error" class="error-msg" style="display:none"></div>
 
-      <button id="start-btn" class="btn-primary">Start Assessment →</button>
+      <button id="start-btn" class="btn-primary">Begin Assessment →</button>
     </div>
   </div>
 
   <!-- ── CHAT SCREEN ── -->
   <div id="chat-screen" style="display:none">
 
-    <aside class="sidebar">
-      <div class="sidebar-top">
-        <div class="sidebar-logo">🛡️ Risk Tool</div>
-        <div class="sidebar-meta">
-          <div class="meta-row"><span class="meta-label">Framework</span><span id="sb-framework" class="meta-value">—</span></div>
-          <div class="meta-row"><span class="meta-label">Organisation</span><span id="sb-org" class="meta-value">—</span></div>
-        </div>
+    <div class="chat-topbar">
+      <div class="topbar-meta">
+        <span class="meta-label">Framework</span>
+        <span id="sb-framework" class="meta-value">—</span>
+        <span class="topbar-sep">·</span>
+        <span class="meta-label">Organisation</span>
+        <span id="sb-org" class="meta-value">—</span>
       </div>
+      <button id="download-btn" class="btn-download" style="display:none" onclick="downloadCSV()">
+        ⬇ Download CSV Report
+      </button>
+    </div>
 
-      <div class="sidebar-progress">
+    <div class="chat-wrapper">
+
+      <div class="chat-progress">
         <div class="progress-header">
           <span>Progress</span>
           <span id="progress-text">0 / 0</span>
@@ -72,27 +77,21 @@
         </div>
       </div>
 
-      <div class="sidebar-bottom">
-        <button id="download-btn" class="btn-download" style="display:none" onclick="downloadCSV()">
-          ⬇ Download CSV Report
-        </button>
-        <p class="sidebar-tip">Answer each question honestly — Claude will assess your risk posture and generate a compliance report.</p>
-      </div>
-    </aside>
+      <main class="chat-main">
+        <div id="messages" class="messages-area"></div>
 
-    <main class="chat-main">
-      <div id="messages" class="messages-area"></div>
+        <div class="input-area">
+          <textarea
+            id="answer-input"
+            placeholder="Type your answer here… (Press Enter to send, Shift+Enter for new line)"
+            rows="3"
+            disabled
+          ></textarea>
+          <button id="send-btn" class="btn-send" disabled onclick="submitAnswer()">Send</button>
+        </div>
+      </main>
 
-      <div class="input-area">
-        <textarea
-          id="answer-input"
-          placeholder="Type your answer here… (Press Enter to send, Shift+Enter for new line)"
-          rows="3"
-          disabled
-        ></textarea>
-        <button id="send-btn" class="btn-send" disabled onclick="submitAnswer()">Send</button>
-      </div>
-    </main>
+    </div>
 
   </div>
 

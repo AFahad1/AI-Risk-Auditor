@@ -11,7 +11,7 @@ load_dotenv()
 
 # Set to an integer to limit questions during testing (e.g. 10).
 # Set to None to run the full questionnaire.
-QUESTION_LIMIT = 10
+QUESTION_LIMIT = None
 
 app = Flask(__name__)
 client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))

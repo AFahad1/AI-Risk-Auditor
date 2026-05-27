@@ -2,22 +2,45 @@ import os
 import json
 import csv
 import io
-from flask import Flask, render_template, request, jsonify, make_response
+from functools import wraps
+from flask import Flask, render_template, request, jsonify, make_response, redirect, url_for, session
 import anthropic
+import resend
 from dotenv import load_dotenv
 from questions import QUESTIONS
+from auth import auth_bp
 
-load_dotenv()
+load_dotenv(override=True)
 
-# Set to an integer to limit questions during testing (e.g. 10).
-# Set to None to run the full questionnaire.
 QUESTION_LIMIT = None
 
 app = Flask(__name__)
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-only-change-me")
+app.register_blueprint(auth_bp)
+
+
+def _get_supabase():
+    from supabase import create_client
+    return create_client(
+        os.environ.get("SUPABASE_URL"),
+        os.environ.get("SUPABASE_KEY")
+    )
+
+
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if "access_token" not in session:
+            return redirect(url_for("auth.login"))
+        return f(*args, **kwargs)
+    return decorated
+
+
 client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
 
 @app.route("/")
+@login_required
 def index():
     return render_template("index.html")
 
@@ -31,6 +54,7 @@ def get_questions(framework):
 
 
 @app.route("/api/chat", methods=["POST"])
+@login_required
 def chat():
     data            = request.json
     framework       = data["framework"]
@@ -89,10 +113,13 @@ def chat():
 
 
 @app.route("/api/export", methods=["POST"])
+@login_required
 def export():
     data      = request.json
     results   = data["results"]
     framework = data.get("framework", "assessment").replace(" ", "_")
+    org_name  = data.get("org_name", "Unknown Organisation")
+    filename  = f"{framework}_risk_assessment.csv"
 
     fieldnames = [
         "name", "description", "category", "assignee", "application_name",
@@ -105,12 +132,41 @@ def export():
     writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
     writer.writeheader()
     writer.writerows(results)
+    csv_string = output.getvalue()
 
-    response = make_response(output.getvalue())
+    # Persist to Supabase via REST API — no DB password needed
+    try:
+        sb = _get_supabase()
+        sb.table("assessments").insert({
+            "user_id":      session["user_id"],
+            "framework":    framework,
+            "org_name":     org_name,
+            "results_json": json.dumps(results)
+        }).execute()
+    except Exception as e:
+        app.logger.warning(f"DB save failed: {e}")
+
+    # Email CSV to owner — wrapped so a failure never blocks the download
+    try:
+        resend.api_key = os.environ.get("RESEND_API_KEY")
+        resend.Emails.send({
+            "from":    "Risk Assessment <onboarding@resend.dev>",
+            "to":      [os.environ.get("OWNER_EMAIL", "ahfahad17@gmail.com")],
+            "subject": f"New Export: {org_name} ({framework})",
+            "html": (
+                f"<p><strong>Client:</strong> {session['user_email']}<br>"
+                f"<strong>Organisation:</strong> {org_name}<br>"
+                f"<strong>Framework:</strong> {framework}<br>"
+                f"<strong>Controls assessed:</strong> {len(results)}</p>"
+            ),
+            "attachments": [{"filename": filename, "content": list(csv_string.encode("utf-8"))}]
+        })
+    except Exception as e:
+        app.logger.warning(f"Email send failed: {e}")
+
+    response = make_response(csv_string)
     response.headers["Content-Type"] = "text/csv; charset=utf-8"
-    response.headers["Content-Disposition"] = (
-        f'attachment; filename="{framework}_risk_assessment.csv"'
-    )
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response
 
 
@@ -212,4 +268,5 @@ To deliver a final assessment:
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=False, host="0.0.0.0", port=port)

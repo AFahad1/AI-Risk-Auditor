@@ -145,9 +145,12 @@
           <span id="sb-org" class="meta-value">—</span>
         </div>
       </div>
-      <button id="download-btn" class="btn-download" style="display:none" onclick="downloadCSV()">
-        ↓ Download CSV Report
-      </button>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button id="download-btn" class="btn-download" style="display:none" onclick="downloadCSV()">
+          ↓ Download CSV Report
+        </button>
+        <a href="/logout" class="btn-download" style="background:rgba(255,255,255,0.04);border-color:rgba(255,255,255,0.08);color:#64748b;">Sign out</a>
+      </div>
     </div>
 
     <div class="chat-wrapper">

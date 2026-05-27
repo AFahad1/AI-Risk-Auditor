@@ -221,7 +221,7 @@ async function downloadCSV() {
   const res  = await fetch("/api/export", {
     method:  "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ results: state.results, framework: state.framework })
+    body: JSON.stringify({ results: state.results, framework: state.framework, org_name: state.orgName })
   });
   const blob = await res.blob();
   const url  = URL.createObjectURL(blob);

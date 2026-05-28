@@ -3,7 +3,7 @@ import json
 import csv
 import io
 from functools import wraps
-from flask import Flask, render_template, request, jsonify, make_response, redirect, url_for, session
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 import anthropic
 import resend
 from dotenv import load_dotenv
@@ -164,10 +164,7 @@ def export():
     except Exception as e:
         app.logger.warning(f"Email send failed: {e}")
 
-    response = make_response(csv_string)
-    response.headers["Content-Type"] = "text/csv; charset=utf-8"
-    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
-    return response
+    return jsonify({"success": True, "message": "Assessment complete. Your report has been sent."})
 
 
 FRAMEWORK_TOOLS = {

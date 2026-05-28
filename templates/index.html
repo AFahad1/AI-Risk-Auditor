@@ -146,8 +146,8 @@
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;">
-        <button id="download-btn" class="btn-download" style="display:none" onclick="downloadCSV()">
-          ↓ Download CSV Report
+        <button id="complete-btn" class="btn-download btn-complete" style="display:none" onclick="completeAndSend()">
+          ✓ Complete Assessment
         </button>
         <a href="/logout" class="btn-download" style="background:rgba(255,255,255,0.04);border-color:rgba(255,255,255,0.08);color:#64748b;">Sign out</a>
       </div>
@@ -181,6 +181,60 @@
 
     </div>
 
+  </div>
+
+  <!-- ── DASHBOARD SCREEN ── -->
+  <div id="dashboard-screen" style="display:none">
+
+    <div class="chat-topbar">
+      <div class="topbar-left">
+        <div class="topbar-logo">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+        </div>
+        <div class="topbar-meta">
+          <span class="meta-label">Framework</span>
+          <span id="dash-framework" class="meta-value">—</span>
+          <span class="topbar-sep">·</span>
+          <span class="meta-label">Organisation</span>
+          <span id="dash-org" class="meta-value">—</span>
+        </div>
+      </div>
+      <a href="/logout" class="btn-download" style="background:rgba(255,255,255,0.04);border-color:rgba(255,255,255,0.08);color:#64748b;">Sign out</a>
+    </div>
+
+    <div class="dash-wrapper">
+
+      <div class="dash-header">
+        <h2 class="dash-title">Risk Dashboard</h2>
+        <p id="dash-subtitle" class="dash-subtitle"></p>
+      </div>
+
+      <div id="dash-sent-banner" class="dash-sent-banner">
+        ✓ Your assessment is complete. A full report has been sent to your advisor.
+      </div>
+
+      <div id="dash-stats" class="dash-stats"></div>
+
+      <div class="dash-table-wrap">
+        <table class="dash-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Risk Name</th>
+              <th>Category</th>
+              <th>Status</th>
+              <th>Residual Risk</th>
+              <th>Tool</th>
+              <th>Treatment</th>
+            </tr>
+          </thead>
+          <tbody id="dash-tbody"></tbody>
+        </table>
+      </div>
+
+    </div>
   </div>
 
   <script src="/static/script.js"></script>

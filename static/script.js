@@ -212,24 +212,79 @@ function completeAssessment() {
     </div>`;
 
   addBotMessage(html, true);
-  document.getElementById("download-btn").style.display  = "block";
+  document.getElementById("complete-btn").style.display  = "block";
   document.querySelector(".input-area").style.display    = "none";
   updateProgress();
 }
 
-async function downloadCSV() {
-  const res  = await fetch("/api/export", {
-    method:  "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ results: state.results, framework: state.framework, org_name: state.orgName })
-  });
-  const blob = await res.blob();
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement("a");
-  a.href     = url;
-  a.download = `${state.framework.replace(/\s/g, "_")}_risk_assessment.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+async function completeAndSend() {
+  const btn = document.getElementById("complete-btn");
+  btn.disabled    = true;
+  btn.textContent = "Sending…";
+
+  try {
+    const res  = await fetch("/api/export", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ results: state.results, framework: state.framework, org_name: state.orgName })
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      document.getElementById("chat-screen").style.display      = "none";
+      document.getElementById("dashboard-screen").style.display = "flex";
+      buildDashboard(state.results, state.framework, state.orgName);
+    } else {
+      btn.disabled    = false;
+      btn.textContent = "✓ Complete Assessment";
+      addBotMessage("There was a problem sending your report. Please try again.");
+    }
+  } catch {
+    btn.disabled    = false;
+    btn.textContent = "✓ Complete Assessment";
+    addBotMessage("Connection error. Please try again.");
+  }
+}
+
+function buildDashboard(results, framework, orgName) {
+  document.getElementById("dash-framework").textContent = framework;
+  document.getElementById("dash-org").textContent       = orgName;
+  document.getElementById("dash-subtitle").textContent  =
+    `${results.length} controls assessed · ${framework} · ${orgName}`;
+
+  const total   = results.length;
+  const open    = results.filter(r => r.status === "OPEN").length;
+  const treated = results.filter(r => r.status === "TREATED").length;
+  const closed  = results.filter(r => r.status === "CLOSED").length;
+  const assessed = results.filter(r => r.status === "ASSESSED").length;
+  const avgL    = total ? (results.reduce((s, r) => s + (r.residual_risk_likelihood || 0), 0) / total).toFixed(1) : "—";
+  const avgI    = total ? (results.reduce((s, r) => s + (r.residual_risk_impact     || 0), 0) / total).toFixed(1) : "—";
+
+  const statsData = [
+    { num: total,    label: "Total Risks"       },
+    { num: open,     label: "Open"              },
+    { num: assessed, label: "Assessed"          },
+    { num: treated,  label: "Treated"           },
+    { num: avgL,     label: "Avg Likelihood"    },
+    { num: avgI,     label: "Avg Impact"        },
+  ];
+  document.getElementById("dash-stats").innerHTML = statsData
+    .map(s => `<div class="stat-box"><div class="stat-num">${s.num}</div><div class="stat-label">${s.label}</div></div>`)
+    .join("");
+
+  const statusClass = { OPEN: "badge-open", ASSESSED: "badge-assessed", TREATED: "badge-treated", CLOSED: "badge-closed" };
+  document.getElementById("dash-tbody").innerHTML = results
+    .map((r, i) => `
+      <tr>
+        <td class="dash-num">${i + 1}</td>
+        <td class="dash-name">${escapeHtml(r.name || "—")}</td>
+        <td><span class="dash-category">${escapeHtml(r.category || "—")}</span></td>
+        <td><span class="badge ${statusClass[r.status] || "badge-open"}">${r.status || "OPEN"}</span></td>
+        <td class="dash-risk">L ${r.residual_risk_likelihood || "—"} · I ${r.residual_risk_impact || "—"}</td>
+        <td class="dash-tool">${escapeHtml(r.application_name || "—")}</td>
+        <td class="dash-treatment">${escapeHtml(r.treatment || "—")}</td>
+      </tr>`)
+    .join("");
 }
 
 // ── UI HELPERS ─────────────────────────────────────────

@@ -952,3 +952,106 @@ input:focus {
 .dash-risk { white-space: nowrap; font-size: 12px; }
 .dash-tool { color: #fb923c; font-size: 12px; max-width: 130px; }
 .dash-treatment { max-width: 240px; font-size: 12px; color: #64748b; }
+
+/* ── AUTH HEADER BUTTON ── */
+.auth-signin-btn {
+  padding: 5px 14px;
+  background: rgba(251,146,60,0.1);
+  color: #fb923c;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid rgba(251,146,60,0.25);
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.auth-signin-btn:hover {
+  background: rgba(251,146,60,0.18);
+  border-color: rgba(251,146,60,0.45);
+}
+.auth-user-email {
+  font-size: 11px;
+  color: #44403c;
+  margin-right: 8px;
+}
+.auth-signout-link {
+  font-size: 12px;
+  color: #44403c;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.auth-signout-link:hover { color: #94a3b8; }
+
+/* ── AUTH MODAL ── */
+#auth-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.auth-modal {
+  background: #100e00;
+  border: 1px solid rgba(251,146,60,0.2);
+  border-radius: 16px;
+  padding: 32px 32px 28px;
+  width: 100%;
+  max-width: 400px;
+  position: relative;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+}
+
+.auth-modal-close {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  background: none;
+  border: none;
+  color: #44403c;
+  font-size: 22px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+.auth-modal-close:hover { color: #94a3b8; }
+
+.auth-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 24px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.auth-tab {
+  flex: 1;
+  padding: 7px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #44403c;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.auth-tab.active {
+  background: rgba(251,146,60,0.12);
+  color: #fb923c;
+}
+
+.auth-tab-panel .form-group { margin-bottom: 16px; }
+
+.btn-auth {
+  margin-top: 8px;
+}

@@ -45,9 +45,9 @@ def health():
 
 
 @app.route("/")
-@login_required
 def index():
-    return render_template("index.html")
+    user_email = session.get("user_email", None)
+    return render_template("index.html", user_email=user_email)
 
 
 @app.route("/api/questions/<framework>")

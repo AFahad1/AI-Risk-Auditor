@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/style.css" />
+  <script>window.USER_EMAIL = {{ user_email | tojson }};</script>
 </head>
 <body>
 
@@ -77,6 +78,7 @@
             </svg>
           </div>
           <span class="form-panel-title">Start Assessment</span>
+          <div id="auth-header-btn" style="margin-left:auto"></div>
         </div>
 
         <div class="form-group">
@@ -181,6 +183,55 @@
 
     </div>
 
+  </div>
+
+  <!-- ── AUTH MODAL ── -->
+  <div id="auth-modal-backdrop" style="display:none" onclick="handleBackdropClick(event)">
+    <div class="auth-modal">
+      <button class="auth-modal-close" onclick="closeAuthModal()">×</button>
+
+      <div class="auth-tabs">
+        <button id="tab-login" class="auth-tab active" onclick="switchAuthTab('login')">Sign In</button>
+        <button id="tab-register" class="auth-tab" onclick="switchAuthTab('register')">Register</button>
+      </div>
+
+      <!-- Sign In panel -->
+      <div id="panel-login" class="auth-tab-panel">
+        <div class="form-group">
+          <label class="field-label" for="login-email">Email</label>
+          <input type="email" id="login-email" placeholder="you@company.com" autocomplete="email" />
+        </div>
+        <div class="form-group">
+          <label class="field-label" for="login-password">Password</label>
+          <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" />
+        </div>
+        <div id="login-error" class="error-msg" style="display:none"></div>
+        <button class="btn-primary btn-auth" onclick="submitLogin()">
+          <span class="btn-inner">Sign In <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span>
+        </button>
+      </div>
+
+      <!-- Register panel -->
+      <div id="panel-register" class="auth-tab-panel" style="display:none">
+        <div class="form-group">
+          <label class="field-label" for="reg-email">Email</label>
+          <input type="email" id="reg-email" placeholder="you@company.com" autocomplete="email" />
+        </div>
+        <div class="form-group">
+          <label class="field-label" for="reg-password">Password</label>
+          <input type="password" id="reg-password" placeholder="••••••••" autocomplete="new-password" />
+        </div>
+        <div class="form-group">
+          <label class="field-label" for="reg-confirm">Confirm Password</label>
+          <input type="password" id="reg-confirm" placeholder="••••••••" autocomplete="new-password" />
+        </div>
+        <div id="reg-error" class="error-msg" style="display:none"></div>
+        <button class="btn-primary btn-auth" onclick="submitRegister()">
+          <span class="btn-inner">Create Account <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span>
+        </button>
+      </div>
+
+    </div>
   </div>
 
   <!-- ── DASHBOARD SCREEN ── -->

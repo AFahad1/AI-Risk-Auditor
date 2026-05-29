@@ -9,7 +9,8 @@ const state = {
   followUpCount:  0,
   controlHistory: [],   // [{role, content}] — resets per control
   results:        [],
-  isProcessing:   false
+  isProcessing:   false,
+  pendingStart:   false
 };
 
 // ── SETUP ──────────────────────────────────────────────
@@ -30,7 +31,27 @@ document.querySelectorAll(".framework-card").forEach(card => {
 
 document.getElementById("start-btn").addEventListener("click", startAssessment);
 
+// Render the sign-in / sign-out button in the form panel header
+function renderAuthHeaderBtn() {
+  const el = document.getElementById("auth-header-btn");
+  if (!el) return;
+  if (window.USER_EMAIL) {
+    el.innerHTML = `
+      <span class="auth-user-email">${escapeHtml(window.USER_EMAIL)}</span>
+      <a href="/logout" class="auth-signout-link">Sign out</a>`;
+  } else {
+    el.innerHTML = `<button class="auth-signin-btn" onclick="openAuthModal('login')">Sign In</button>`;
+  }
+}
+renderAuthHeaderBtn();
+
 async function startAssessment() {
+  if (!window.USER_EMAIL) {
+    state.pendingStart = true;
+    openAuthModal('login');
+    return;
+  }
+
   const orgName  = document.getElementById("org-name").value.trim();
   const assignee = document.getElementById("assignee").value.trim();
   const errorEl  = document.getElementById("setup-error");
@@ -419,3 +440,100 @@ document.getElementById("answer-input").addEventListener("keydown", e => {
 });
 
 document.getElementById("send-btn").addEventListener("click", submitAnswer);
+
+// ── AUTH MODAL ─────────────────────────────────────────
+
+function openAuthModal(tab = 'login') {
+  switchAuthTab(tab);
+  document.getElementById("auth-modal-backdrop").style.display = "flex";
+  const firstInput = tab === 'login'
+    ? document.getElementById("login-email")
+    : document.getElementById("reg-email");
+  setTimeout(() => firstInput && firstInput.focus(), 50);
+}
+
+function closeAuthModal() {
+  document.getElementById("auth-modal-backdrop").style.display = "none";
+  ["login-email","login-password","reg-email","reg-password","reg-confirm"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
+  ["login-error","reg-error"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
+}
+
+function handleBackdropClick(e) {
+  if (e.target === document.getElementById("auth-modal-backdrop")) closeAuthModal();
+}
+
+function switchAuthTab(tab) {
+  document.getElementById("panel-login").style.display    = tab === 'login'    ? "block" : "none";
+  document.getElementById("panel-register").style.display = tab === 'register' ? "block" : "none";
+  document.getElementById("tab-login").classList.toggle("active",    tab === 'login');
+  document.getElementById("tab-register").classList.toggle("active", tab === 'register');
+}
+
+function showAuthError(panelId, msg) {
+  const el = document.getElementById(panelId);
+  el.textContent   = msg;
+  el.style.display = "block";
+}
+
+async function submitLogin() {
+  const email = document.getElementById("login-email").value.trim();
+  const pw    = document.getElementById("login-password").value;
+  document.getElementById("login-error").style.display = "none";
+
+  const res  = await fetch("/api/auth/login", {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({ email, password: pw })
+  });
+  const data = await res.json();
+
+  if (data.success) {
+    window.USER_EMAIL = data.email;
+    renderAuthHeaderBtn();
+    closeAuthModal();
+    if (state.pendingStart) { state.pendingStart = false; startAssessment(); }
+  } else {
+    showAuthError("login-error", data.error || "Sign in failed.");
+  }
+}
+
+async function submitRegister() {
+  const email   = document.getElementById("reg-email").value.trim();
+  const pw      = document.getElementById("reg-password").value;
+  const confirm = document.getElementById("reg-confirm").value;
+  document.getElementById("reg-error").style.display = "none";
+
+  const res  = await fetch("/api/auth/register", {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({ email, password: pw, confirm })
+  });
+  const data = await res.json();
+
+  if (data.success) {
+    window.USER_EMAIL = data.email;
+    renderAuthHeaderBtn();
+    closeAuthModal();
+    if (state.pendingStart) { state.pendingStart = false; startAssessment(); }
+  } else {
+    showAuthError("reg-error", data.error || "Registration failed.");
+  }
+}
+
+// Allow Enter key in auth modal inputs
+["login-email","login-password"].forEach(id => {
+  document.getElementById(id)?.addEventListener("keydown", e => {
+    if (e.key === "Enter") submitLogin();
+  });
+});
+["reg-email","reg-password","reg-confirm"].forEach(id => {
+  document.getElementById(id)?.addEventListener("keydown", e => {
+    if (e.key === "Enter") submitRegister();
+  });
+});

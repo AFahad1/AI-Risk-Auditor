@@ -29,7 +29,7 @@ document.querySelectorAll(".framework-card").forEach(card => {
   });
 });
 
-document.getElementById("start-btn").addEventListener("click", startAssessment);
+document.getElementById("start-btn").addEventListener("click", showInstructions);
 
 // Render the sign-in / sign-out button in the form panel header
 function renderAuthHeaderBtn() {
@@ -45,19 +45,30 @@ function renderAuthHeaderBtn() {
 }
 renderAuthHeaderBtn();
 
-async function startAssessment() {
+function showInstructions() {
   if (!window.USER_EMAIL) {
     state.pendingStart = true;
     openAuthModal('login');
     return;
   }
+  const orgName = document.getElementById("org-name").value.trim();
+  if (!orgName) { showSetupError("Please enter your organisation name."); return; }
+  document.getElementById("setup-error").style.display = "none";
+  document.getElementById("instructions-backdrop").style.display = "flex";
+}
 
+function closeInstructions(proceed) {
+  document.getElementById("instructions-backdrop").style.display = "none";
+  if (proceed) startAssessment();
+}
+
+function handleInstructionsBackdrop(e) {
+  if (e.target === document.getElementById("instructions-backdrop")) closeInstructions(true);
+}
+
+async function startAssessment() {
   const orgName  = document.getElementById("org-name").value.trim();
   const assignee = document.getElementById("assignee").value.trim();
-  const errorEl  = document.getElementById("setup-error");
-
-  if (!orgName) { showSetupError("Please enter your organisation name."); return; }
-  errorEl.style.display = "none";
 
   state.orgName  = orgName;
   state.assignee = assignee;
@@ -228,12 +239,12 @@ function completeAssessment() {
         <div class="stat-box"><div class="stat-num">${avgI}</div><div class="stat-label">Avg Residual Impact</div></div>
       </div>
       <p style="margin-top:14px;color:#475569;font-size:13px;">
-        Click <strong>Download CSV Report</strong> in the sidebar to export your full risk register.
+        Click <strong>Complete Assessment</strong> below to submit your report.
       </p>
     </div>`;
 
   addBotMessage(html, true);
-  document.getElementById("complete-btn").style.display  = "block";
+  document.getElementById("complete-bar").style.display  = "flex";
   document.querySelector(".input-area").style.display    = "none";
   updateProgress();
 }
@@ -257,7 +268,7 @@ async function completeAndSend() {
       buildDashboard(state.results, state.framework, state.orgName);
     } else {
       btn.disabled    = false;
-      btn.textContent = "✓ Complete Assessment";
+      btn.textContent = "Complete Assessment";
       addBotMessage("There was a problem sending your report. Please try again.");
     }
   } catch {
@@ -497,7 +508,7 @@ async function submitLogin() {
     window.USER_EMAIL = data.email;
     renderAuthHeaderBtn();
     closeAuthModal();
-    if (state.pendingStart) { state.pendingStart = false; startAssessment(); }
+    if (state.pendingStart) { state.pendingStart = false; showInstructions(); }
   } else {
     showAuthError("login-error", data.error || "Sign in failed.");
   }
@@ -520,7 +531,7 @@ async function submitRegister() {
     window.USER_EMAIL = data.email;
     renderAuthHeaderBtn();
     closeAuthModal();
-    if (state.pendingStart) { state.pendingStart = false; startAssessment(); }
+    if (state.pendingStart) { state.pendingStart = false; showInstructions(); }
   } else {
     showAuthError("reg-error", data.error || "Registration failed.");
   }

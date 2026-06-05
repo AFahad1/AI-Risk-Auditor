@@ -3,12 +3,15 @@ const state = {
   orgName:        "",
   assignee:       "",
   employeeCount:  null,
-  phase:          "employee_count",   // "employee_count" | "assessment"
+  mode:           "risk",          // "risk" | "gap"
+  phase:          "employee_count",
   questions:      [],
   currentIndex:   0,
+  currentSection: null,            // tracks section changes for gap banners
   followUpCount:  0,
-  controlHistory: [],   // [{role, content}] — resets per control
+  controlHistory: [],
   results:        [],
+  gapResults:     [],
   isProcessing:   false,
   pendingStart:   false
 };
@@ -23,11 +26,54 @@ if (defaultCard) {
 
 document.querySelectorAll(".framework-card").forEach(card => {
   card.addEventListener("click", () => {
+    if (card.classList.contains("card-disabled")) return;
     document.querySelectorAll(".framework-card").forEach(c => c.classList.remove("selected"));
     card.classList.add("selected");
     state.framework = card.dataset.framework;
   });
 });
+
+// Mode toggle
+document.querySelectorAll(".mode-btn").forEach(btn => {
+  btn.addEventListener("click", () => setMode(btn.dataset.mode));
+});
+
+function setMode(mode) {
+  state.mode = mode;
+
+  document.querySelectorAll(".mode-btn").forEach(btn =>
+    btn.classList.toggle("active", btn.dataset.mode === mode)
+  );
+
+  const soc2Card   = document.querySelector(".framework-card[data-framework='SOC 2']");
+  const soc2Badge  = soc2Card.querySelector(".coming-soon-badge");
+
+  if (mode === "gap") {
+    soc2Card.classList.add("card-disabled");
+    soc2Badge.style.display = "inline";
+    // auto-select ISO 27001 if SOC 2 was selected
+    if (state.framework === "SOC 2") {
+      document.querySelectorAll(".framework-card").forEach(c => c.classList.remove("selected"));
+      document.querySelector(".framework-card[data-framework='ISO 27001']").classList.add("selected");
+      state.framework = "ISO 27001";
+    }
+    document.getElementById("hero-title").innerHTML =
+      'Evaluate<br>your<br><span class="hero-accent">Compliance Posture.</span>';
+    document.getElementById("hero-body-1").textContent =
+      "A structured, AI-guided gap assessment that evaluates your organisation's compliance against a framework — identifying what's in place, what's missing, and where action is needed.";
+    document.getElementById("hero-body-2").textContent =
+      "Each gap assessment is tailored to your chosen framework, producing a full gap register ready for export and remediation.";
+  } else {
+    soc2Card.classList.remove("card-disabled");
+    soc2Badge.style.display = "none";
+    document.getElementById("hero-title").innerHTML =
+      'Evaluate<br>your<br><span class="hero-accent">Risk Posture.</span>';
+    document.getElementById("hero-body-1").textContent =
+      "A structured, AI-guided compliance interview that assesses your organisation's risk posture control by control — surfacing gaps, scoring residual risk, and producing a full risk register ready for export.";
+    document.getElementById("hero-body-2").textContent =
+      "Each risk assessment is tailored to your chosen framework and organisation size, with practical treatment recommendations you can act on immediately.";
+  }
+}
 
 document.getElementById("start-btn").addEventListener("click", showInstructions);
 
@@ -70,51 +116,68 @@ async function startAssessment() {
   const orgName  = document.getElementById("org-name").value.trim();
   const assignee = document.getElementById("assignee").value.trim();
 
-  state.orgName  = orgName;
-  state.assignee = assignee;
+  state.orgName        = orgName;
+  state.assignee       = assignee;
+  state.results        = [];
+  state.gapResults     = [];
+  state.currentSection = null;
 
   const btn = document.getElementById("start-btn");
   btn.textContent = "Loading…";
   btn.disabled    = true;
 
   try {
-    const res = await fetch(`/api/questions/${encodeURIComponent(state.framework)}`);
+    const endpoint = state.mode === "gap"
+      ? `/api/gap-questions/${encodeURIComponent(state.framework)}`
+      : `/api/questions/${encodeURIComponent(state.framework)}`;
+    const res = await fetch(endpoint);
     state.questions = await res.json();
   } catch {
     showSetupError("Failed to load questions. Is the server running?");
-    btn.textContent = "Start Assessment →";
+    btn.textContent = "Begin Assessment";
     btn.disabled    = false;
     return;
   }
 
   document.getElementById("setup-screen").style.display = "none";
   document.getElementById("chat-screen").style.display  = "flex";
-  document.getElementById("sb-framework").textContent   = state.framework;
+  const topbarLabel = state.mode === "gap" ? `${state.framework} Gap Assessment` : state.framework;
+  document.getElementById("sb-framework").textContent   = topbarLabel;
   document.getElementById("sb-org").textContent         = state.orgName;
 
   updateProgress();
 
-  addBotMessage(
-    `Welcome. I'll be your <strong>${state.framework}</strong> compliance auditor for ` +
-    `<strong>${state.orgName}</strong> today. We have <strong>${state.questions.length} controls</strong> ` +
-    `to work through. For each one I may ask a few follow-up questions before we move on. ` +
-    `Answer as honestly and specifically as you can.`,
-    true
-  );
-
-  setTimeout(() => {
-    addBotMessage("Before we begin — approximately how many employees does your organisation have?");
-    enableInput();
-  }, 1000);
+  if (state.mode === "gap") {
+    addBotMessage(
+      `Welcome. I'll be your <strong>${escapeHtml(state.framework)}</strong> gap analyst for ` +
+      `<strong>${escapeHtml(state.orgName)}</strong> today. We have <strong>${state.questions.length} controls</strong> ` +
+      `to work through across multiple sections. For each control I may ask up to 2 follow-up questions — ` +
+      `answer as honestly and specifically as you can.`,
+      true
+    );
+    setTimeout(() => loadGapControl(0), 1000);
+  } else {
+    addBotMessage(
+      `Welcome. I'll be your <strong>${escapeHtml(state.framework)}</strong> compliance auditor for ` +
+      `<strong>${escapeHtml(state.orgName)}</strong> today. We have <strong>${state.questions.length} controls</strong> ` +
+      `to work through. For each one I may ask a few follow-up questions before we move on. ` +
+      `Answer as honestly and specifically as you can.`,
+      true
+    );
+    setTimeout(() => {
+      addBotMessage("Before we begin — approximately how many employees does your organisation have?");
+      enableInput();
+    }, 1000);
+  }
 }
 
 function showSetupError(msg) {
   const el = document.getElementById("setup-error");
-  el.textContent    = msg;
-  el.style.display  = "block";
+  el.textContent   = msg;
+  el.style.display = "block";
 }
 
-// ── CONTROL LIFECYCLE ──────────────────────────────────
+// ── RISK ASSESSMENT FLOW ───────────────────────────────
 
 async function loadControl(index) {
   if (index >= state.questions.length) {
@@ -130,7 +193,6 @@ async function loadControl(index) {
   updateProgress();
   addControlDivider(index);
 
-  // Claude generates the opening question — history is empty
   await callAuditor();
 }
 
@@ -146,17 +208,19 @@ async function submitAnswer() {
   if (state.phase === "employee_count") {
     state.employeeCount = answer;
     state.phase         = "assessment";
-    addBotMessage(`Got it — ${answer}. Let's begin the assessment.`);
+    addBotMessage(`Got it — ${escapeHtml(answer)}. Let's begin the assessment.`);
     setTimeout(() => loadControl(0), 1000);
     return;
   }
 
-  state.isProcessing = true;
-
-  // Append user answer to history before sending
+  state.isProcessing   = true;
   state.controlHistory = [...state.controlHistory, { role: "user", content: answer }];
 
-  await callAuditor();
+  if (state.mode === "gap") {
+    await callGapAuditor();
+  } else {
+    await callAuditor();
+  }
 }
 
 async function callAuditor() {
@@ -192,20 +256,94 @@ async function callAuditor() {
     state.controlHistory = history;
 
     if (result.action === "followup") {
-      // Opening question does not count toward the 3 follow-up limit
       if (!isOpening) state.followUpCount++;
       addBotMessage(result.message);
       enableInput();
       state.isProcessing = false;
-
     } else if (result.action === "assess") {
       disableInput();
       addAssessmentCard(result.message, result.data, state.currentIndex);
       state.results.push(result.data);
       updateProgress();
-
-      // Auto-advance to next control after a pause
       setTimeout(() => loadControl(state.currentIndex + 1), 3500);
+    }
+
+  } catch {
+    removeThinking(thinkingId);
+    addBotMessage("Connection error. Please try again.");
+    enableInput();
+    state.isProcessing = false;
+  }
+}
+
+// ── GAP ASSESSMENT FLOW ────────────────────────────────
+
+async function loadGapControl(index) {
+  if (index >= state.questions.length) {
+    completeGapAssessment();
+    return;
+  }
+
+  const control        = state.questions[index];
+  state.currentIndex   = index;
+  state.followUpCount  = 0;
+  state.controlHistory = [];
+  state.isProcessing   = false;
+
+  // Section banner when section changes
+  if (control.section !== state.currentSection) {
+    state.currentSection = control.section;
+    addSectionBanner(control.section);
+  }
+
+  updateProgress();
+  addControlDivider(index);
+
+  await callGapAuditor();
+}
+
+async function callGapAuditor() {
+  const control    = state.questions[state.currentIndex];
+  const isOpening  = state.controlHistory.length === 0;
+  const thinkingId = addThinking();
+
+  try {
+    const res = await fetch("/api/gap-chat", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        framework:       state.framework,
+        control:         control,
+        history:         state.controlHistory,
+        follow_up_count: state.followUpCount,
+        assignee:        state.assignee
+      })
+    });
+
+    const data = await res.json();
+    removeThinking(thinkingId);
+
+    if (!data.success) {
+      addBotMessage("I encountered an error. Please try again.");
+      enableInput();
+      state.isProcessing = false;
+      return;
+    }
+
+    const { result, history } = data;
+    state.controlHistory = history;
+
+    if (result.action === "followup") {
+      if (!isOpening) state.followUpCount++;
+      addBotMessage(result.message);
+      enableInput();
+      state.isProcessing = false;
+    } else if (result.action === "assess") {
+      disableInput();
+      addGapAssessmentCard(result.message, result.data, state.currentIndex);
+      state.gapResults.push(result.data);
+      updateProgress();
+      setTimeout(() => loadGapControl(state.currentIndex + 1), 3500);
     }
 
   } catch {
@@ -229,7 +367,7 @@ function completeAssessment() {
   const html = `
     <div class="completion-card">
       <h3>Assessment Complete</h3>
-      <p>Here is a summary of your <strong>${state.framework}</strong> risk assessment for <strong>${state.orgName}</strong>.</p>
+      <p>Here is a summary of your <strong>${escapeHtml(state.framework)}</strong> risk assessment for <strong>${escapeHtml(state.orgName)}</strong>.</p>
       <div class="stat-grid">
         <div class="stat-box"><div class="stat-num">${total}</div><div class="stat-label">Controls Assessed</div></div>
         <div class="stat-box"><div class="stat-num">${open}</div><div class="stat-label">Open Risks</div></div>
@@ -249,56 +387,114 @@ function completeAssessment() {
   updateProgress();
 }
 
+function completeGapAssessment() {
+  const total      = state.gapResults.length;
+  const compliant  = state.gapResults.filter(r => r.status === "Compliant").length;
+  const partial    = state.gapResults.filter(r => r.status === "Partial Compliant").length;
+  const nonComp    = state.gapResults.filter(r => r.status === "Non Compliant").length;
+  const review     = state.gapResults.filter(r => r.status === "Need Review").length;
+
+  const html = `
+    <div class="completion-card">
+      <h3>Gap Assessment Complete</h3>
+      <p>Here is a summary of your <strong>${escapeHtml(state.framework)}</strong> gap assessment for <strong>${escapeHtml(state.orgName)}</strong>.</p>
+      <div class="stat-grid">
+        <div class="stat-box"><div class="stat-num">${total}</div><div class="stat-label">Controls Assessed</div></div>
+        <div class="stat-box"><div class="stat-num">${compliant}</div><div class="stat-label">Compliant</div></div>
+        <div class="stat-box"><div class="stat-num">${partial}</div><div class="stat-label">Partial Compliant</div></div>
+        <div class="stat-box"><div class="stat-num">${nonComp}</div><div class="stat-label">Non Compliant</div></div>
+        <div class="stat-box"><div class="stat-num">${review}</div><div class="stat-label">Need Review</div></div>
+      </div>
+      <p style="margin-top:14px;color:#475569;font-size:13px;">
+        Click <strong>Complete Assessment</strong> below to submit your gap register.
+      </p>
+    </div>`;
+
+  addBotMessage(html, true);
+  document.getElementById("complete-bar").style.display  = "flex";
+  document.querySelector(".input-area").style.display    = "none";
+  updateProgress();
+}
+
 async function completeAndSend() {
   const btn = document.getElementById("complete-btn");
   btn.disabled    = true;
   btn.textContent = "Sending…";
 
-  try {
-    const res  = await fetch("/api/export", {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ results: state.results, framework: state.framework, org_name: state.orgName })
-    });
-    const data = await res.json();
+  if (state.mode === "gap") {
+    try {
+      const res  = await fetch("/api/gap-export", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ results: state.gapResults, framework: state.framework, org_name: state.orgName })
+      });
+      const data = await res.json();
 
-    if (data.success) {
-      document.getElementById("chat-screen").style.display      = "none";
-      document.getElementById("dashboard-screen").style.display = "flex";
-      buildDashboard(state.results, state.framework, state.orgName);
-    } else {
+      if (data.success) {
+        document.getElementById("chat-screen").style.display      = "none";
+        document.getElementById("dashboard-screen").style.display = "flex";
+        buildGapCompletion(state.gapResults, state.framework, state.orgName);
+      } else {
+        btn.disabled    = false;
+        btn.textContent = "Complete Assessment";
+        addBotMessage("There was a problem sending your report. Please try again.");
+      }
+    } catch {
       btn.disabled    = false;
       btn.textContent = "Complete Assessment";
-      addBotMessage("There was a problem sending your report. Please try again.");
+      addBotMessage("Connection error. Please try again.");
     }
-  } catch {
-    btn.disabled    = false;
-    btn.textContent = "✓ Complete Assessment";
-    addBotMessage("Connection error. Please try again.");
+  } else {
+    try {
+      const res  = await fetch("/api/export", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ results: state.results, framework: state.framework, org_name: state.orgName })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        document.getElementById("chat-screen").style.display      = "none";
+        document.getElementById("dashboard-screen").style.display = "flex";
+        buildDashboard(state.results, state.framework, state.orgName);
+      } else {
+        btn.disabled    = false;
+        btn.textContent = "Complete Assessment";
+        addBotMessage("There was a problem sending your report. Please try again.");
+      }
+    } catch {
+      btn.disabled    = false;
+      btn.textContent = "Complete Assessment";
+      addBotMessage("Connection error. Please try again.");
+    }
   }
 }
 
 function buildDashboard(results, framework, orgName) {
+  document.getElementById("dash-title").textContent     = "Risk Dashboard";
   document.getElementById("dash-framework").textContent = framework;
   document.getElementById("dash-org").textContent       = orgName;
   document.getElementById("dash-subtitle").textContent  =
     `${results.length} controls assessed · ${framework} · ${orgName}`;
+  document.getElementById("dash-sent-banner").textContent =
+    "Your assessment is complete. A full report has been sent to your advisor.";
+  document.querySelector(".dash-table-wrap").style.display = "";
 
-  const total   = results.length;
-  const open    = results.filter(r => r.status === "OPEN").length;
-  const treated = results.filter(r => r.status === "TREATED").length;
-  const closed  = results.filter(r => r.status === "CLOSED").length;
+  const total    = results.length;
+  const open     = results.filter(r => r.status === "OPEN").length;
+  const treated  = results.filter(r => r.status === "TREATED").length;
+  const closed   = results.filter(r => r.status === "CLOSED").length;
   const assessed = results.filter(r => r.status === "ASSESSED").length;
-  const avgL    = total ? (results.reduce((s, r) => s + (r.residual_risk_likelihood || 0), 0) / total).toFixed(1) : "—";
-  const avgI    = total ? (results.reduce((s, r) => s + (r.residual_risk_impact     || 0), 0) / total).toFixed(1) : "—";
+  const avgL     = total ? (results.reduce((s, r) => s + (r.residual_risk_likelihood || 0), 0) / total).toFixed(1) : "—";
+  const avgI     = total ? (results.reduce((s, r) => s + (r.residual_risk_impact     || 0), 0) / total).toFixed(1) : "—";
 
   const statsData = [
-    { num: total,    label: "Total Risks"       },
-    { num: open,     label: "Open"              },
-    { num: assessed, label: "Assessed"          },
-    { num: treated,  label: "Treated"           },
-    { num: avgL,     label: "Avg Likelihood"    },
-    { num: avgI,     label: "Avg Impact"        },
+    { num: total,    label: "Total Risks"    },
+    { num: open,     label: "Open"           },
+    { num: assessed, label: "Assessed"       },
+    { num: treated,  label: "Treated"        },
+    { num: avgL,     label: "Avg Likelihood" },
+    { num: avgI,     label: "Avg Impact"     },
   ];
   document.getElementById("dash-stats").innerHTML = statsData
     .map(s => `<div class="stat-box"><div class="stat-num">${s.num}</div><div class="stat-label">${s.label}</div></div>`)
@@ -319,16 +515,55 @@ function buildDashboard(results, framework, orgName) {
     .join("");
 }
 
+function buildGapCompletion(results, framework, orgName) {
+  document.getElementById("dash-title").textContent     = "Gap Assessment Complete";
+  document.getElementById("dash-framework").textContent = `${framework} Gap`;
+  document.getElementById("dash-org").textContent       = orgName;
+  document.getElementById("dash-subtitle").textContent  =
+    `${results.length} controls assessed · ${framework} Gap Assessment · ${orgName}`;
+  document.getElementById("dash-sent-banner").textContent =
+    "Your gap assessment is complete. Your gap register has been sent to your advisor.";
+
+  // Hide the risk table — not applicable for gap assessment
+  document.querySelector(".dash-table-wrap").style.display = "none";
+
+  const total     = results.length;
+  const compliant = results.filter(r => r.status === "Compliant").length;
+  const partial   = results.filter(r => r.status === "Partial Compliant").length;
+  const nonComp   = results.filter(r => r.status === "Non Compliant").length;
+  const review    = results.filter(r => r.status === "Need Review").length;
+  const na        = results.filter(r => r.status === "Not Applicable").length;
+
+  document.getElementById("dash-stats").innerHTML = [
+    { num: total,     label: "Controls Assessed" },
+    { num: compliant, label: "Compliant"         },
+    { num: partial,   label: "Partial Compliant" },
+    { num: nonComp,   label: "Non Compliant"     },
+    { num: review,    label: "Need Review"       },
+    { num: na,        label: "Not Applicable"    },
+  ].map(s => `<div class="stat-box"><div class="stat-num">${s.num}</div><div class="stat-label">${s.label}</div></div>`)
+   .join("");
+}
+
 // ── UI HELPERS ─────────────────────────────────────────
+
+function addSectionBanner(section) {
+  const msgs = document.getElementById("messages");
+  const div  = document.createElement("div");
+  div.className = "section-banner";
+  div.innerHTML = `<span class="section-banner-text">${escapeHtml(section.toUpperCase())}</span>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
 
 function addControlDivider(index) {
   const msgs  = document.getElementById("messages");
   const total = state.questions.length;
   const div   = document.createElement("div");
-  div.className   = "control-divider";
-  div.innerHTML   = `<span>Control ${index + 1} of ${total}</span>`;
+  div.className = "control-divider";
+  div.innerHTML = `<span>Control ${index + 1} of ${total}</span>`;
   msgs.appendChild(div);
-  msgs.scrollTop  = msgs.scrollHeight;
+  msgs.scrollTop = msgs.scrollHeight;
 }
 
 function addBotMessage(content, isHtml = false) {
@@ -414,12 +649,60 @@ function addAssessmentCard(message, data, index) {
   msgs.scrollTop = msgs.scrollHeight;
 }
 
+function addGapAssessmentCard(message, data, index) {
+  const statusBadgeClass = {
+    "Compliant":                    "badge-compliant",
+    "Non Compliant":                "badge-noncompliant",
+    "Partial Compliant":            "badge-partial",
+    "Need Review":                  "badge-review",
+    "Not Applicable":               "badge-na"
+  }[data.status] || "badge-review";
+
+  const natureBadgeClass = {
+    "Major":                        "badge-nature-major",
+    "Minor":                        "badge-nature-minor",
+    "Observation":                  "badge-nature-obs",
+    "Opportunity for Improvement":  "badge-nature-ofi"
+  }[data.nature] || "badge-nature-obs";
+
+  const html = `
+    <div class="assess-intro">${escapeHtml(message)}</div>
+    <div class="assess-card">
+      <div class="assess-header">
+        <span class="assess-title">${escapeHtml(data.name)}</span>
+        <span class="badge ${statusBadgeClass}">${escapeHtml(data.status)}</span>
+      </div>
+      <div class="assess-body">
+        <div class="assess-row">
+          <span class="assess-label">Nature</span>
+          <span class="assess-value"><span class="badge ${natureBadgeClass}">${escapeHtml(data.nature)}</span></span>
+        </div>
+        <div class="assess-row">
+          <span class="assess-label">Description</span>
+          <span class="assess-value">${escapeHtml(data.description)}</span>
+        </div>
+        <div class="assess-row">
+          <span class="assess-label">Action Item</span>
+          <span class="assess-value">${escapeHtml(data.action_items)}</span>
+        </div>
+      </div>
+    </div>
+    <div class="assess-footer">Moving to the next control…</div>`;
+
+  const msgs = document.getElementById("messages");
+  const div  = document.createElement("div");
+  div.className = "message bot-message";
+  div.innerHTML = `<div class="avatar"><span class="bot-dot"></span></div><div class="bubble assess-bubble">${html}</div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
 function updateProgress() {
   const total = state.questions.length;
-  const done  = state.results.length;
+  const done  = state.mode === "gap" ? state.gapResults.length : state.results.length;
   const pct   = total > 0 ? Math.round((done / total) * 100) : 0;
-  document.getElementById("progress-bar").style.width    = pct + "%";
-  document.getElementById("progress-text").textContent   = `${done} / ${total}`;
+  document.getElementById("progress-bar").style.width  = pct + "%";
+  document.getElementById("progress-text").textContent = `${done} / ${total}`;
 }
 
 function enableInput() {

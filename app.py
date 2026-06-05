@@ -7,7 +7,7 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for, s
 import anthropic
 import resend
 from dotenv import load_dotenv
-from questions import QUESTIONS
+from questions import QUESTIONS, GAP_QUESTIONS
 from auth import auth_bp
 
 load_dotenv(override=True)
@@ -56,6 +56,11 @@ def get_questions(framework):
     if QUESTION_LIMIT is not None:
         questions = questions[:QUESTION_LIMIT]
     return jsonify(questions)
+
+
+@app.route("/api/gap-questions/<framework>")
+def get_gap_questions(framework):
+    return jsonify(GAP_QUESTIONS.get(framework, []))
 
 
 @app.route("/api/chat", methods=["POST"])
@@ -172,6 +177,111 @@ def export():
     return jsonify({"success": True, "message": "Assessment complete. Your report has been sent."})
 
 
+@app.route("/api/gap-chat", methods=["POST"])
+@login_required
+def gap_chat():
+    data            = request.json
+    framework       = data["framework"]
+    control         = data["control"]   # {id, section, control_area, question}
+    history         = data["history"]
+    follow_up_count = data["follow_up_count"]
+    assignee        = data.get("assignee", "")
+
+    system = _build_gap_system_prompt(framework, control, follow_up_count)
+
+    messages = history if history else [
+        {"role": "user", "content": "Please begin assessing this control."}
+    ]
+
+    try:
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1024,
+            system=system,
+            messages=messages
+        )
+
+        raw  = response.content[0].text.strip()
+        text = raw
+        if "```" in text:
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+            text = text.strip()
+
+        result = json.loads(text)
+
+        if result["action"] == "assess":
+            audit_framework_label = {
+                "ISO 27001": "ISO/IEC 27001",
+                "SOC 2":     "SOC 2",
+            }.get(framework, framework)
+
+            d = result.setdefault("data", {})
+            d["audit_framework"] = audit_framework_label
+            d["assignee"]        = assignee
+            d["department"]      = ""
+
+        updated_history = messages + [{"role": "assistant", "content": raw}]
+        return jsonify({"success": True, "result": result, "history": updated_history})
+
+    except json.JSONDecodeError:
+        return jsonify({"success": False, "error": "Could not parse Claude response as JSON"}), 500
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/gap-export", methods=["POST"])
+@login_required
+def gap_export():
+    data      = request.json
+    results   = data["results"]
+    framework = data.get("framework", "assessment").replace(" ", "_")
+    org_name  = data.get("org_name", "Unknown Organisation")
+    filename  = f"{framework}_gap_assessment.csv"
+
+    fieldnames = [
+        "audit_framework", "name", "description", "assignee",
+        "nature", "department", "status", "action_items"
+    ]
+
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(results)
+    csv_string = output.getvalue()
+
+    try:
+        sb = _get_supabase()
+        sb.table("assessments").insert({
+            "user_id":      session["user_id"],
+            "framework":    framework + "_gap",
+            "org_name":     org_name,
+            "results_json": json.dumps(results)
+        }).execute()
+    except Exception as e:
+        app.logger.warning(f"DB save failed: {e}")
+
+    try:
+        resend.api_key = os.environ.get("RESEND_API_KEY")
+        resend.Emails.send({
+            "from":    "Gap Assessment <onboarding@resend.dev>",
+            "to":      [os.environ.get("OWNER_EMAIL", "ahfahad17@gmail.com")],
+            "subject": f"New Gap Assessment: {org_name} ({framework})",
+            "html": (
+                f"<p><strong>Client:</strong> {session['user_email']}<br>"
+                f"<strong>Organisation:</strong> {org_name}<br>"
+                f"<strong>Framework:</strong> {framework} Gap Assessment<br>"
+                f"<strong>Controls assessed:</strong> {len(results)}</p>"
+            ),
+            "attachments": [{"filename": filename, "content": list(csv_string.encode("utf-8"))}]
+        })
+    except Exception as e:
+        app.logger.warning(f"Email send failed: {e}")
+
+    return jsonify({"success": True, "message": "Gap assessment complete. Your report has been sent."})
+
+
 FRAMEWORK_TOOLS = {
     "ISO 27001": (
         "Suggest tools aligned with ISO 27001 Annex A controls. "
@@ -266,6 +376,71 @@ To deliver a final assessment:
     "treatment": "Low-cost, actionable recommendation - one or two sentences"
   }}
 }}"""
+
+    return prompt
+
+
+def _build_gap_system_prompt(framework, control, follow_up_count):
+    remaining   = 2 - follow_up_count
+    must_assess = follow_up_count >= 2
+
+    prompt = f"""You are a senior {framework} gap analyst conducting a structured gap assessment interview. \
+You are friendly and professional, but decisive — you have only 2 follow-up questions per control, so every question must count.
+
+Current control:
+  Section:      {control['section']}
+  Control Area: {control['control_area']}
+  Question:     {control['question']}
+
+Follow-up questions used: {follow_up_count} / 2 maximum.
+"""
+
+    if must_assess:
+        prompt += "\nYou have used all 2 follow-up questions. You MUST now produce your final gap assessment.\n"
+    else:
+        prompt += f"You may ask up to {remaining} more follow-up question(s), or assess immediately if you have enough information.\n"
+
+    prompt += """
+Gap analyst rules:
+- Ask only one question at a time
+- Focus follow-ups on: whether the control is formally documented, who owns it, and whether evidence exists
+- Never repeat a question already in the conversation
+- If the user says they don't know or are unsure, acknowledge it professionally and immediately move to the assessment
+- If the user responds with "Out of Scope" or any clear indication the control is not applicable, immediately produce a final assessment with status "Not Applicable", nature "Observation", and a brief acknowledgement message — do not ask follow-up questions
+- When assessing, write a short natural transition message (e.g. "Thank you — here is my assessment for this control.")
+- Keep action items concise — one line only
+- Status guidance:
+  * Compliant: control is fully implemented with documented evidence
+  * Partial Compliant: control exists but has notable gaps in coverage or documentation
+  * Non Compliant: control is entirely absent or fundamentally broken
+  * Need Review: insufficient information to determine compliance status
+  * Not Applicable: control is not applicable to this organisation
+- Nature guidance:
+  * Major: control is entirely absent or fundamentally broken; directly violates the framework requirement
+  * Minor: control exists but has notable gaps; partially meets the requirement
+  * Observation: informational finding; not a direct gap but worth noting
+  * Opportunity for Improvement: control is largely compliant; suggestion to strengthen it further
+
+ALWAYS respond with a single valid JSON object only — no markdown, no text outside the JSON.
+
+To ask a follow-up question:
+{
+  "action": "followup",
+  "message": "Your concise question"
+}
+
+To deliver a final gap assessment:
+{
+  "action": "assess",
+  "message": "Short natural transition — 1-2 sentences",
+  "data": {
+    "name": "Short gap name — a few words",
+    "description": "1-2 line description of the gap for the client organisation",
+    "nature": "Major | Minor | Observation | Opportunity for Improvement",
+    "status": "Compliant | Non Compliant | Partial Compliant | Need Review | Not Applicable",
+    "action_items": "One-line treatment recommendation"
+  }
+}"""
 
     return prompt
 

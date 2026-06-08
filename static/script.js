@@ -148,6 +148,7 @@ async function startAssessment() {
   updateProgress();
 
   if (state.mode === "gap") {
+    state.phase = "assessment";   // gap mode has no employee-count step
     addBotMessage(
       `Welcome. I'll be your <strong>${escapeHtml(state.framework)}</strong> gap analyst for ` +
       `<strong>${escapeHtml(state.orgName)}</strong> today. We have <strong>${state.questions.length} controls</strong> ` +
